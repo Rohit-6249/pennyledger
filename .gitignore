@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.python-version-local
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
