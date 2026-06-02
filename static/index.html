@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PennyLedger · playful expense tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%B7%3C/text%3E%3C/svg%3E" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Outfit', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            brand: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca' },
+          },
+          keyframes: {
+            'fade-up': { '0%': { opacity:0, transform:'translateY(14px)' }, '100%': { opacity:1, transform:'translateY(0)' } },
+            'pop': { '0%': { transform:'scale(.85)', opacity:0 }, '60%': { transform:'scale(1.04)' }, '100%': { transform:'scale(1)', opacity:1 } },
+            'float': { '0%,100%': { transform:'translateY(0)' }, '50%': { transform:'translateY(-10px)' } },
+            'spin-slow': { 'to': { transform:'rotate(360deg)' } },
+            'shimmer': { '100%': { transform:'translateX(100%)' } },
+            'gradient': { '0%,100%': { backgroundPosition:'0% 50%' }, '50%': { backgroundPosition:'100% 50%' } },
+          },
+          animation: {
+            'fade-up':'fade-up .5s ease both',
+            'pop':'pop .4s cubic-bezier(.2,.9,.3,1.3) both',
+            'float':'float 6s ease-in-out infinite',
+            'spin-slow':'spin-slow 1.1s linear infinite',
+            'gradient':'gradient 12s ease infinite',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body { background: radial-gradient(1200px 600px at 10% -10%, #e0e7ff 0%, transparent 60%),
+                       radial-gradient(1000px 500px at 110% 10%, #fae8ff 0%, transparent 55%),
+                       linear-gradient(120deg,#f8fafc,#eef2ff,#f0fdfa); background-size:200% 200%; animation:gradient 16s ease infinite; }
+    .card { backdrop-filter: blur(6px); }
+    .skeleton { position:relative; overflow:hidden; background:#e9eaf3; }
+    .skeleton::after { content:''; position:absolute; inset:0; transform:translateX(-100%);
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent); animation:shimmer 1.4s infinite; }
+    [x-cloak]{ display:none !important; }
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="font-sans text-slate-800 min-h-screen">
+
+  <!-- ===== Loader ===== -->
+  <div x-data x-show="!$store.app.ready" x-transition.opacity.duration.500ms
+       class="fixed inset-0 z-50 grid place-items-center bg-white/80 backdrop-blur-sm">
+    <div class="flex flex-col items-center gap-4">
+      <svg class="h-16 w-16 animate-spin-slow text-brand-500" viewBox="0 0 50 50" fill="none">
+        <circle cx="25" cy="25" r="20" stroke="currentColor" stroke-width="5" stroke-opacity=".2"/>
+        <path d="M45 25a20 20 0 0 0-20-20" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+      <p class="text-sm font-medium text-slate-500 tracking-wide">Counting your pennies…</p>
+    </div>
+  </div>
+
+  <main x-data="ledger()" x-init="init()" x-cloak class="mx-auto max-w-6xl px-4 py-8 md:py-12">
+
+    <!-- ===== Header ===== -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-10 animate-fade-up">
+      <div class="flex items-center gap-4">
+        <div class="grid place-items-center h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-lg shadow-brand-500/30 animate-float">
+          <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/>
+            <path d="M2 9v1c0 1.1.9 2 2 2h1"/><circle cx="16" cy="10" r="1" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-brand-600 to-fuchsia-600 bg-clip-text text-transparent">PennyLedger</h1>
+          <p class="text-sm text-slate-500">Track money the cheerful way · accounts, budgets &amp; monthly insight</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm font-medium text-slate-500">Month</label>
+        <input type="month" x-model="month" @change="loadMonth()"
+               class="rounded-xl border-slate-200 bg-white/80 card px-3 py-2 text-sm shadow-sm focus:ring-2 focus:ring-brand-400 focus:border-brand-400" />
+      </div>
+    </header>
+
+    <!-- ===== Stat cards ===== -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+      <template x-for="(s,i) in stats" :key="s.label">
+        <div class="card rounded-2xl bg-white/70 p-5 shadow-sm ring-1 ring-black/5 animate-pop hover:-translate-y-1 transition"
+             :style="`animation-delay:${i*80}ms`">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-slate-500" x-text="s.label"></span>
+            <span class="grid place-items-center h-9 w-9 rounded-xl" :class="s.bg" x-html="s.icon"></span>
+          </div>
+          <p class="mt-3 text-2xl font-extrabold tabular-nums" :class="s.color" x-text="money(s.value)"></p>
+        </div>
+      </template>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- ===== Add transaction ===== -->
+      <section class="lg:col-span-1 card rounded-2xl bg-white/70 p-6 shadow-sm ring-1 ring-black/5 animate-fade-up">
+        <h2 class="flex items-center gap-2 text-lg font-bold mb-4">
+          <svg class="h-5 w-5 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add transaction
+        </h2>
+        <form @submit.prevent="addTxn()" class="space-y-3">
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" @click="form.type='expense'" :class="form.type==='expense' ? 'bg-rose-500 text-white shadow' : 'bg-slate-100 text-slate-500'" class="rounded-xl py-2 text-sm font-semibold transition">💸 Expense</button>
+            <button type="button" @click="form.type='income'" :class="form.type==='income' ? 'bg-emerald-500 text-white shadow' : 'bg-slate-100 text-slate-500'" class="rounded-xl py-2 text-sm font-semibold transition">💰 Income</button>
+          </div>
+          <select x-model.number="form.account_id" required class="w-full rounded-xl border-slate-200 text-sm focus:ring-2 focus:ring-brand-400">
+            <option value="" disabled>Select account…</option>
+            <template x-for="a in accounts" :key="a.id"><option :value="a.id" x-text="a.name"></option></template>
+          </select>
+          <select x-model.number="form.category_id" class="w-full rounded-xl border-slate-200 text-sm focus:ring-2 focus:ring-brand-400">
+            <option :value="null">Uncategorized</option>
+            <template x-for="c in categories.filter(c=>c.kind===form.type)" :key="c.id"><option :value="c.id" x-text="c.name"></option></template>
+          </select>
+          <div class="flex gap-2">
+            <div class="relative flex-1">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₹</span>
+              <input type="number" step="0.01" min="0.01" x-model.number="form.amount" placeholder="0.00" required class="w-full pl-7 rounded-xl border-slate-200 text-sm focus:ring-2 focus:ring-brand-400" />
+            </div>
+            <input type="date" x-model="form.occurred_on" required class="rounded-xl border-slate-200 text-sm focus:ring-2 focus:ring-brand-400" />
+          </div>
+          <input type="text" x-model="form.note" placeholder="Note (optional)" class="w-full rounded-xl border-slate-200 text-sm focus:ring-2 focus:ring-brand-400" />
+          <button type="submit" :disabled="busy" class="w-full rounded-xl bg-gradient-to-r from-brand-600 to-fuchsia-600 py-2.5 font-semibold text-white shadow-lg shadow-brand-500/30 hover:scale-[1.02] active:scale-95 transition disabled:opacity-60">
+            <span x-show="!busy">Add it ✨</span>
+            <span x-show="busy" class="inline-flex items-center gap-2"><svg class="h-4 w-4 animate-spin-slow" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity=".3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>Saving…</span>
+          </button>
+        </form>
+
+        <!-- quick-add account / category -->
+        <div class="mt-5 pt-5 border-t border-slate-100 grid grid-cols-2 gap-2">
+          <button @click="newAccount()" class="rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition">+ Account</button>
+          <button @click="newCategory()" class="rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition">+ Category</button>
+        </div>
+      </section>
+
+      <!-- ===== Transactions list ===== -->
+      <section class="lg:col-span-2 card rounded-2xl bg-white/70 p-6 shadow-sm ring-1 ring-black/5 animate-fade-up">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="flex items-center gap-2 text-lg font-bold">
+            <svg class="h-5 w-5 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            Transactions <span class="text-sm font-normal text-slate-400" x-text="`· ${month}`"></span>
+          </h2>
+          <span class="text-xs font-medium text-slate-400" x-text="`${transactions.length} entries`"></span>
+        </div>
+
+        <!-- skeletons -->
+        <template x-if="loading">
+          <div class="space-y-2">
+            <template x-for="i in 4" :key="i"><div class="skeleton h-14 rounded-xl"></div></template>
+          </div>
+        </template>
+
+        <!-- empty -->
+        <template x-if="!loading && transactions.length===0">
+          <div class="grid place-items-center py-14 text-center">
+            <svg class="h-20 w-20 text-slate-200 animate-float" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h18v12H3z"/><path d="M3 10h18M7 15h4"/></svg>
+            <p class="mt-3 text-sm text-slate-400">No transactions this month yet. Add your first one! 🌱</p>
+          </div>
+        </template>
+
+        <ul x-show="!loading && transactions.length" class="space-y-2">
+          <template x-for="t in transactions" :key="t.id">
+            <li class="group flex items-center gap-3 rounded-xl border border-slate-100 bg-white/60 p-3 hover:shadow-md hover:border-brand-200 transition animate-pop">
+              <span class="grid place-items-center h-10 w-10 rounded-xl text-lg" :class="t.type==='income' ? 'bg-emerald-100' : 'bg-rose-100'" x-text="t.type==='income' ? '💰' : '💸'"></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold text-slate-700" x-text="t.note || categoryName(t.category_id)"></p>
+                <p class="text-xs text-slate-400" x-text="`${categoryName(t.category_id)} · ${t.occurred_on}`"></p>
+              </div>
+              <span class="font-bold tabular-nums" :class="t.type==='income' ? 'text-emerald-600' : 'text-rose-500'" x-text="(t.type==='income'?'+':'−') + money(t.amount_minor)"></span>
+              <button @click="delTxn(t.id)" class="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition" title="Delete">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+              </button>
+            </li>
+          </template>
+        </ul>
+      </section>
+    </div>
+
+    <!-- ===== Budgets / report ===== -->
+    <section class="mt-6 card rounded-2xl bg-white/70 p-6 shadow-sm ring-1 ring-black/5 animate-fade-up">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="flex items-center gap-2 text-lg font-bold">
+          <svg class="h-5 w-5 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg>
+          Budgets &amp; spending
+        </h2>
+        <button @click="newBudget()" class="rounded-xl bg-slate-100 py-2 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition">+ Budget</button>
+      </div>
+
+      <template x-if="report && report.budgets.length===0">
+        <p class="text-sm text-slate-400 py-6 text-center">No budgets set for <span x-text="month"></span>. Add one to track limits 🎯</p>
+      </template>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <template x-for="b in (report ? report.budgets : [])" :key="b.category_id">
+          <div class="rounded-xl border border-slate-100 p-4 animate-pop">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-semibold text-slate-700" x-text="b.category_name"></span>
+              <span class="text-xs font-medium" :class="b.over_budget ? 'text-rose-500' : 'text-emerald-600'" x-text="b.over_budget ? 'Over budget' : 'On track'"></span>
+            </div>
+            <div class="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-700" :class="b.over_budget ? 'bg-gradient-to-r from-rose-400 to-rose-600' : 'bg-gradient-to-r from-emerald-400 to-emerald-600'"
+                   :style="`width:${Math.min(100, b.limit_minor ? (b.spent_minor/b.limit_minor*100) : 0)}%`"></div>
+            </div>
+            <div class="mt-2 flex justify-between text-xs text-slate-500 tabular-nums">
+              <span x-text="`${money(b.spent_minor)} spent`"></span>
+              <span x-text="`of ${money(b.limit_minor)}`"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <footer class="mt-10 text-center text-xs text-slate-400">
+      Built with FastAPI · SQLModel · Tailwind · Alpine — <a href="/docs" class="text-brand-500 hover:underline">API docs</a>
+    </footer>
+
+    <!-- ===== Toast ===== -->
+    <div x-show="toast.show" x-transition x-cloak
+         class="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg"
+         :class="toast.error ? 'bg-rose-500' : 'bg-emerald-500'">
+      <span x-text="toast.error ? '⚠️' : '✅'"></span><span x-text="toast.msg"></span>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('app', { ready: false });
+    });
+
+    function ledger() {
+      const todayMonth = new Date().toISOString().slice(0, 7);
+      const today = new Date().toISOString().slice(0, 10);
+      return {
+        month: todayMonth,
+        accounts: [], categories: [], transactions: [], report: null,
+        loading: true, busy: false,
+        toast: { show: false, msg: '', error: false },
+        form: { type: 'expense', account_id: '', category_id: null, amount: null, note: '', occurred_on: today },
+
+        get stats() {
+          const r = this.report || { income_minor: 0, expense_minor: 0, net_minor: 0 };
+          return [
+            { label: 'Income',  value: r.income_minor,  color: 'text-emerald-600', bg: 'bg-emerald-100', icon: '⬆️' },
+            { label: 'Expense', value: r.expense_minor, color: 'text-rose-500',    bg: 'bg-rose-100',    icon: '⬇️' },
+            { label: 'Net',     value: r.net_minor,     color: r.net_minor>=0 ? 'text-brand-600' : 'text-rose-500', bg: 'bg-brand-100', icon: '🪙' },
+          ];
+        },
+
+        money(minor) {
+          const v = (minor || 0) / 100;
+          return '₹' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        },
+        categoryName(id) {
+          if (id == null) return 'Uncategorized';
+          const c = this.categories.find(c => c.id === id);
+          return c ? c.name : 'Uncategorized';
+        },
+        notify(msg, error = false) {
+          this.toast = { show: true, msg, error };
+          setTimeout(() => this.toast.show = false, 2600);
+        },
+        async api(path, opts = {}) {
+          const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+          if (!res.ok) {
+            let detail = res.status;
+            try { detail = (await res.json()).detail || detail; } catch (e) {}
+            throw new Error(typeof detail === 'string' ? detail : 'Request failed');
+          }
+          return res.status === 204 ? null : res.json();
+        },
+
+        async init() {
+          try {
+            await this.reloadRefs();
+            await this.loadMonth();
+          } catch (e) { this.notify(e.message, true); }
+          finally { Alpine.store('app').ready = true; }
+        },
+        async reloadRefs() {
+          [this.accounts, this.categories] = await Promise.all([
+            this.api('/accounts'), this.api('/categories'),
+          ]);
+          if (!this.form.account_id && this.accounts.length) this.form.account_id = this.accounts[0].id;
+        },
+        async loadMonth() {
+          this.loading = true;
+          try {
+            [this.transactions, this.report] = await Promise.all([
+              this.api('/transactions?month=' + this.month),
+              this.api('/reports/monthly?month=' + this.month),
+            ]);
+          } catch (e) { this.notify(e.message, true); }
+          finally { this.loading = false; }
+        },
+
+        async addTxn() {
+          if (!this.form.account_id) return this.notify('Pick an account first', true);
+          this.busy = true;
+          try {
+            await this.api('/transactions', { method: 'POST', body: JSON.stringify({
+              account_id: this.form.account_id,
+              category_id: this.form.category_id || null,
+              type: this.form.type,
+              amount_minor: Math.round(this.form.amount * 100),
+              note: this.form.note || '',
+              occurred_on: this.form.occurred_on,
+            })});
+            this.notify('Transaction added');
+            this.form.amount = null; this.form.note = '';
+            await this.loadMonth();
+          } catch (e) { this.notify(e.message, true); }
+          finally { this.busy = false; }
+        },
+        async delTxn(id) {
+          try { await this.api('/transactions/' + id, { method: 'DELETE' }); this.notify('Deleted'); await this.loadMonth(); }
+          catch (e) { this.notify(e.message, true); }
+        },
+        async newAccount() {
+          const name = prompt('Account name (e.g. Wallet, HDFC, Card):');
+          if (!name) return;
+          try { await this.api('/accounts', { method: 'POST', body: JSON.stringify({ name }) }); await this.reloadRefs(); this.notify('Account added'); }
+          catch (e) { this.notify(e.message, true); }
+        },
+        async newCategory() {
+          const name = prompt('Category name (e.g. Food, Rent, Salary):');
+          if (!name) return;
+          const kind = confirm('OK = expense,  Cancel = income') ? 'expense' : 'income';
+          try { await this.api('/categories', { method: 'POST', body: JSON.stringify({ name, kind }) }); await this.reloadRefs(); this.notify('Category added'); }
+          catch (e) { this.notify(e.message, true); }
+        },
+        async newBudget() {
+          const expenseCats = this.categories.filter(c => c.kind === 'expense');
+          if (!expenseCats.length) return this.notify('Add an expense category first', true);
+          const name = prompt('Budget for which expense category?\n' + expenseCats.map(c => c.name).join(', '));
+          if (!name) return;
+          const cat = expenseCats.find(c => c.name.toLowerCase() === name.toLowerCase());
+          if (!cat) return this.notify('Category not found', true);
+          const limit = parseFloat(prompt('Monthly limit in ₹:'));
+          if (!limit) return;
+          try { await this.api('/budgets', { method: 'POST', body: JSON.stringify({ category_id: cat.id, month: this.month, limit_minor: Math.round(limit*100) }) }); await this.loadMonth(); this.notify('Budget set 🎯'); }
+          catch (e) { this.notify(e.message, true); }
+        },
+      };
+    }
+  </script>
+</body>
+</html>

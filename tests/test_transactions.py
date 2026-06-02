@@ -15,7 +15,10 @@ async def _make_category(client: AsyncClient, name: str, kind: str = "expense") 
 
 async def test_health_and_root(client: AsyncClient) -> None:
     assert (await client.get("/health")).json() == {"status": "ok"}
-    assert (await client.get("/")).json()["service"] == "PennyLedger"
+    root = await client.get("/")
+    assert root.status_code == 200
+    assert "text/html" in root.headers["content-type"]
+    assert "PennyLedger" in root.text
 
 
 async def test_create_and_list_transaction(client: AsyncClient) -> None:
